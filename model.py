@@ -5,7 +5,6 @@ from scipy.fftpack import fft
 
 #TODO: 
 # loss functions which are more robust at middle easy - later during assignment
-# MCMC
 
 """
 Model class:
@@ -17,6 +16,9 @@ Model class:
     To fit the model, fit with a list of strikes, prices, and times
 """
 
+
+# Black-Scholes-Merton Characteristic Function for pricing in the carr-madan
+# formula
 def bsfftcf2(u,p,r,t,x):
     sig = list(map(float,x))[0]
     mu = np.log(p) + (r - 0.5*sig**2)*t
@@ -25,6 +27,7 @@ def bsfftcf2(u,p,r,t,x):
     y = np.exp(1j*u*mu - 0.5*u**2*var)
     return(y)
 
+# Heston CF for carr-madan has a stochastic volatility term
 def hestfftcf(u, p, r, t, params):
     sig, kappa, eta, theta, rho = list(map(float,params))
     kappa = abs(kappa)
@@ -47,6 +50,7 @@ def hestfftcf(u, p, r, t, params):
     return(np.exp(step1 + step2 + step3))
 
 
+# Bates CF Heston with Jumps
 def batesfftcf(u, p, r, t, params):
     eta, kappa, theta, rho, sig, lbda, muJ, sigJ = list(map(float,params))
 
@@ -77,6 +81,10 @@ def batesfftcf(u, p, r, t, params):
 
     return(np.exp(step1 + step2 + step3 + step4))
 
+
+"""
+Loss functions, each one takes inputs yHat, y, and weights
+"""
 def MSE(yHat, y, weights):
     y = y.reshape(yHat.shape)
     return np.mean(weights*(yHat - y)**2)
@@ -93,6 +101,8 @@ def ARPE(yHat,y, weights):
     y = y.reshape(yHat.shape)
     return np.mean(np.abs(weights*(yHat - y))/y)
 
+
+# central difference derivative calculation for use in minimization
 def J(f, theta, h = 0.000001):
     I = np.identity(np.size(theta))
     f0 = f(theta)
@@ -114,7 +124,11 @@ def J(f, theta, h = 0.000001):
 
     return(J)
 
+"""
+Line search algorithms, first one is basic line search used with newton-rapheson
+second for BFGS - 2nd order approximation of the hessian
 
+"""
 """ def lineSearch(f,x,d,fx,Jd, alpha = 1, sigma = .0001, beta = 0.5):
     a = alpha
     while (f(x + a*d) - fx > sigma*a*Jd):
@@ -142,6 +156,7 @@ def lineSearch(f,x,d,fx, Jd, alpha = 1, a_low = 0, a_hi = 100000000, sigma = 10e
     return(alpha)
 
 
+# Pricing with carr-madan
 def CallPrice(cf, s0, K, t, r, params):
     N = 4096
 
@@ -179,6 +194,14 @@ def CallPrice(cf, s0, K, t, r, params):
     return(price)
 
 
+# Class object called using
+# x = Model()
+# x.cf(choice) choice = {'hest', 'bs', 'bates'}
+# x.fit(strikes, times, prices, weights)
+# x.predict(strikes, times) gives model predictions
+# x.priceMC(function, maturity, n, M) gives a MC simulation of the function
+#  function is formatted such that it takes only a stock price (use a lambda 
+#  function)
 class Model:
     def __init__(self):
         self.parameters = np.array([])
@@ -404,95 +427,3 @@ class Model:
 
 
         return(np.exp(-r*maturity)*expectation, np.exp(-r*maturity)*sd)
-
-
-
-"""
-Old BS Code
-                
-            for m in range(M):
-                St = np.zeros(n)
-                St[0] = self.s0
-                Z = np.random.randn(n)
-                for i in range(1,n):
-                    St[i] = St[i-1]*np.exp( mu_dt + var*Z[i])
-
-                val = optionFunc(St)
-                expectation += val
-                sq_expectation += val**2
-
-
-            expectation = expectation/M
-            sq_expectation = sq_expectation/M
-
-Old Heston Code
-            r = self.r
-            mu_dt = 1 + r*dt
-            expectation = 0
-            sq_expectation = 0
-
-            for m in range(M):
-                St = np.zeros(n)
-                Vt = np.zeros(n)
-
-                St[0] = self.s0
-                Vt[0] = sig**2
-                Z = np.random.randn(n)
-                Zstar = np.random.randn(n)
-
-                e1 = Z
-                e2 = rho*e1 + np.sqrt(1 - rho**2)*Zstar
-
-                for i in range(1,n):
-
-                    #vi = np.minimum(np.array(0.00001), Vt[i])
-                    vi = Vt[i-1]
-
-                    St[i] = St[i-1]*(mu_dt + np.sqrt(vi*dt)*e1[i-1])
-                    Vt[i] = np.abs(vi + (kappa*(eta - vi) - theta**2/4)*dt + \
-                        theta*np.sqrt(vi*dt)*e2[i-1] + ((theta**2)*dt*e2[i-1]**2)/4)
-
-                val = optionFunc(St)
-                expectation = expectation + val
-                sq_expectation += val**2
-
-            expectation = expectation /M
-            sq_expectation = sq_expectation/M
-
-
-old bates code
-
-            for m in range(M):
-                St = np.zeros(n)
-                St[0] = self.s0
-
-                sig2t = np.zeros(n)
-                sig2t[0] = sig**2
-
-                Z = np.random.randn(n)
-                Zstar = np.random.randn(n)
-
-                e1 = Z
-                e2 = rho*e1 + np.sqrt(1 - rho**2)*Zstar
-                
-                dNt = np.random.poisson(lbda*dt, n)
-
-                NJ = sigJ*np.random.randn(n) + np.log(1 + muJ) - sigJ**2/2
-                Jt = np.exp(NJ) - 1
-
-                for i in range(1,n):
-                    sig2i = np.abs(sig2t[i-1])
-
-                    St[i] = St[i-1] + St[i-1] * (mu_dt + np.sqrt(sig2i*dt)*e1[i-1]) + \
-                        Jt[i-1]*dNt[i-1]
-
-                    sig2t[i] = kappa*(eta - sig2i)*dt + theta*np.sqrt(sig2i*dt)*e2[i-1]
-
-                val = optionFunc(St)
-                expectation += val
-                sq_expectation += val**2
-
-            expectation = expectation/M
-            sq_expectation = sq_expectation/M
-
-"""

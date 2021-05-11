@@ -17,14 +17,11 @@ from optionfuncs import *
 
 # Get stock information from FSLY
 ticker = 'FSLY'
-
-
 stock = si.get_data(ticker)
-
-
 s0 =si.get_live_price(ticker)
 
 
+"""
 treasury_rate = si.get_live_price("^TNX")/100
 if np.isnan(treasury_rate):
     r = 1.67/100
@@ -41,7 +38,7 @@ dfCalls = pd.DataFrame()
 T = []
 
 
-"""
+
 # get live information
 for day in dates:
 
@@ -71,7 +68,7 @@ for day in dates:
 
 """
 
-# save data
+# save data for may 6
 dfCalls = pd.read_csv('dfCallsMay6')
 dateAccess = datetime(2021,5,6).date()
 s0 = si.get_data(ticker).loc[str(dateAccess)]['close']
@@ -88,9 +85,8 @@ Weights = dfCalls['Bid-Ask'].to_numpy()/s0
 # remove zeros from the dataset 
 # (bid-ask can have zero values if timing is incorect)
 # Important to only run this after market has opened
-
 valid = np.where(Weights != 0)
-#Weights = 1
+
 if np.size(valid) > 0:
     Weights = Weights[valid]
     Strikes = Strikes[valid]
@@ -140,6 +136,7 @@ M.parameters[4] = np.minimum(1, np.maximum(-1, M.parameters[4]))
 # cause nontrivial problems
 """
 
+# Use previously found parameter values
 M.parameters = np.array([[ 0.84516848],[ 3.23138087],[ 0.57471116],[ 0.77461603],[-0.6163664 ]])
 
 
@@ -157,6 +154,7 @@ for t in np.unique(Times):
 plt.show()
 
 
+
 K = 1
 M.s0 = 1
 fDOBC = lambda x: DOBC(x, 1, .7)
@@ -167,58 +165,76 @@ fPC = lambda x: np.array([EP(x, K), EC(x, K)])
 fP = lambda x: EP(x, K)
 fC = lambda x: EC(x, K)
 
-# ndays = 36
+# ndays is measured in days/10 so ndays = 36 is 360 days
+ndays = 36
 
-# Hs = np.arange(0.5, 0.95, .05)
-# means = np.zeros((len(Hs), ndays))
-# sds = np.zeros((len(Hs), ndays))
-# for j in range(0,len(Hs)):
-#     H = Hs[j]
-#     fDIBP = lambda x: DIBP(x, K, H)
-#     for i in range(1,ndays+1):
-#         print(j,i)
-#         t = i*10/365
-#         a,b = M.priceMC(fDIBP, t, n = ndays+i, M = 100000)
-#         means[j, i-1] = a
-#         sds[j, i-1] = b
 
-# times = [i/ndays for i in range(1,ndays+1)]
-# fig, ax = plt.subplots()
-# for i in range(0, len(Hs)):
-#     label_i = str(np.round(Hs[i],2))
-#     ax.errorbar(times, means[i,:], sds[i,:], c=np.random.rand(3,), ecolor = 'gray', alpha = 0.8, label = label_i)
+# Find the prices of down and in barrier put options given various maturities and
+# barrier values graphically
 
-# ax.legend(bbox_to_anchor=(1, 1), loc="upper right")
-# ax.set_xticks([round(t,1) for t in times])
-# #ax.set_xticklabels([i*10 for i in range(1,ndays+1)])
-# plt.show()
+Hs = np.arange(0.5, 0.95, .05)
+means = np.zeros((len(Hs), ndays))
+sds = np.zeros((len(Hs), ndays))
+for j in range(0,len(Hs)):
+    H = Hs[j]
+    fDIBP = lambda x: DIBP(x, K, H)
+    for i in range(1,ndays+1):
+        print(j,i)
+        t = i*10/365
+        # M is set too low here, increase value for a precise graph (reccomended
+        # at 100000)
+        a,b = M.priceMC(fDIBP, t, n = ndays+i, M = 1000)
+        means[j, i-1] = a
+        sds[j, i-1] = b
+
+# Coce to make a plot of the above
+times = [i/ndays for i in range(1,ndays+1)]
+fig, ax = plt.subplots()
+for i in range(0, len(Hs)):
+    label_i = str(np.round(Hs[i],2))
+    ax.errorbar(times, means[i,:], sds[i,:], c=np.random.rand(3,), ecolor = 'gray', alpha = 0.8, label = label_i)
+
+ax.legend(bbox_to_anchor=(1, 1), loc="upper right")
+ax.set_xticks([round(t,1) for t in times])
+#ax.set_xticklabels([i*10 for i in range(1,ndays+1)])
+plt.show()
 
 H = 0.75
 K = 1
-# H = 0.75
-# K = 1
-# fDIBP = lambda x: DIBP(x, K, H)
-# M.priceMC(fDIBC, .5, 180, M = 10000)
-# E = []
-# V = []
-# for i in range(1000):
-#     x, s = M.priceMC(fDIBP, .5, 400, M = 10000)
-#     E.append(x)
-#     V.append(s)
 
-# plt.hist(E, bins = 20, density = True)
-# mu = np.mean(E)
-# sig = np.std(E)
-# x = np.arange(mu - 4.0*sig,mu + 4.0*sig, 0.001)
-# y = np.sqrt(1/(2*np.pi*sig**2))*np.exp(-1/2*(x - mu)**2/sig**2)
-# plt.plot(x,y)
-# plt.show()
 
+# MC Simulation should have results approximately normal by the CLT, find 
+# mean value of several simulations, also very costly reduce M for noisier
+# approximation
+
+fDIBP = lambda x: DIBP(x, K, H)
+M.priceMC(fDIBC, .5, 180, M = 10000)
+E = []
+V = []
+for i in range(1000):
+    x, s = M.priceMC(fDIBP, .5, 400, M = 10000)
+    E.append(x)
+    V.append(s)
+
+plt.hist(E, bins = 20, density = True)
+mu = np.mean(E)
+sig = np.std(E)
+x = np.arange(mu - 4.0*sig,mu + 4.0*sig, 0.001)
+y = np.sqrt(1/(2*np.pi*sig**2))*np.exp(-1/2*(x - mu)**2/sig**2)
+plt.plot(x,y)
+plt.show()
+
+# Arbitrary margin value
 margin = 0.01
-#Coupon = mu + (1 - np.exp(-r/2)) - margin
-#rate = Coupon / sum(1/6*np.exp(-r*1/2/6 * k) for k in range(1,7))
+Coupon = mu + (1 - np.exp(-r/2)) - margin
+
+# number of payments
+npay = 6
+rate = Coupon / sum(1/npay*np.exp(-r*1/2/npay * k) for k in range(1,npay+1))
 
 
+# use finite difference method to find value of down and in barrier call delta
+# this is used for hedging.  
 h = 0.00001
 H = 0.75
 fDIBCh = lambda x: DIBC(x + h, K, H)
@@ -226,24 +242,29 @@ fDIBCmh = lambda x: DIBC(x - h, K, H)
 fDelta = lambda x: (DIBP(x + h, K, H) - DIBP(x - h, K, H))/(2*h)
 
 
-# stocks = [i/10 for i in range(1, 21, 1)]
-# Delta = 0
-# reps = 20
-# for j in range(reps):
-#     delta_S = np.zeros(len(stocks))
-#     for i in range(len(stocks)):
-#         M.s0 = stocks[i]
-#         delta_S[i],sd = M.priceMC(fDelta, 0.5, n = 400, M = 20000)
+"""
+generates a graph of deltas by stock price.  expensive to do without much noise
+stocks = [i/10 for i in range(1, 21, 1)]
+Delta = 0
+reps = 20
+for j in range(reps):
+    delta_S = np.zeros(len(stocks))
+    for i in range(len(stocks)):
+        M.s0 = stocks[i]
+        # make sure value of M is set higher than 10000
+        delta_S[i],sd = M.priceMC(fDelta, 0.5, n = 400, M = 20000)
 
-#     Delta += delta_S[i]
+    Delta += delta_S[i]
 
 
-#plt.plot(stocks,delta_S/reps)
+plt.plot(stocks,delta_S/reps)
+"""
 
 M.s0 = s0
 K = s0
+
+# selected value of barrier for final product
 H = 0.75*s0
 h = .001
 fDelta = lambda x: (DIBP(x + h, K, H) - DIBP(x - h, K, H))/(2*h)
 delta, sdelta = M.priceMC(fDelta, 0.5, n = 1000, M = 10000)
-print(delta)
