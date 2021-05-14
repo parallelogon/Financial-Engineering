@@ -10,10 +10,10 @@ import torch
 from scipy import stats
 import pso
 import model as md 
-
+from optionfuncs import *
 
 ticker = 'FSLY'
-
+"""
 stock = si.get_data(ticker)
 
 s0 =si.get_live_price(ticker)
@@ -54,7 +54,12 @@ for day in dates:
     tempdf["Maturity"] = dt
     T.append(dt)
     dfCalls = dfCalls.append(tempdf)
+"""
 
+dfCalls = pd.read_csv('dfCallsMay6')
+dateAccess = datetime(2021,5,6).date()
+s0 = si.get_data(ticker).loc[str(dateAccess)]['close']
+r = si.get_data("^TNX").loc[str(dateAccess)]['close']/100
 
 Prices = dfCalls['Last Price'].to_numpy()/s0
 Strikes = dfCalls['Strike'].to_numpy()/s0
@@ -71,17 +76,16 @@ Prices = Prices[valid]
 
 Weights = 1/Weights.reshape(-1,1)
 Weights = Weights/np.linalg.norm(Weights)
-M.weights = Weights
-#N.priceMC(f, 1)
+
 
 M = md.Model()
 M.cf('bates')
 M.objective('RMSE')
 M.s0 = s0/s0
 M.r = r
+M.weights = Weights
 
 funcMin = lambda x: M.lossFn(M.price(Strikes, Times, x), Prices, M.weights)
-
 
 # order of the parameter array: eta, kappa, theta, rho, sig, lbda, muJ, sigJ
 bound_eta = (0.001, 2)
@@ -106,46 +110,25 @@ initial[7] = np.maximum(0.001, np.random.rand()*1)
 print(initial)
 
 bounds=[bound_eta, bound_kappa, bound_theta, bound_rho, bound_sig, bound_lbda, bound_muJ, bound_sigJ]
-swarm = pso.PSO(funcMin,initial,bounds,num_particles=100,maxiter=100)
+swarm = pso.PSO(funcMin,initial,bounds,num_particles=1000,maxiter=10)
 M.parameters = np.array(swarm.best_g).reshape(-1,1)
 
 M.s0 = 1
 M.fit(Strikes, Times, Prices,weights = M.weights)
+M.parameters[3] = min(max(-1,M.parameters[3]),1)
+
 predictions = []
 for t in np.unique(Times):
     stri = Strikes[np.where(Times == t)]
-    plt.scatter(stri, M.predict(stri, t), marker = '+')
-
-est =  M.price(Strikes,Times, M.parameters)
-plt.scatter(Strikes, Prices, color = 'none', edgecolors = 'purple')
+    c = np.random.rand(3,)
+    plt.scatter(stri, M.predict(stri, t), marker = '+', color = c)
+    pri = Prices[np.where(Times ==t)]
+    #plt.scatter(stri, pri, color = 'none', edgecolors = 'purple')
+    plt.scatter(stri, pri, color = 'none', edgecolors=c)
+    
 plt.show()
 
-def S(St):
-    return(St[-1])
-
-def EC(St, K):
-    out = np.maximum(0, St[-1] - K)
-    return(np.maximum(0, St[-1] - K))
-
-def DOBC(St, K, H):
-    if min(St) <= H:
-        return 0
-    else:
-        return(np.maximum(0, St[-1] -K))
-
-def DIBC(St, K, H):
-    if min(St) > H:
-        return 0
-    else:
-        return(np.maximum(0, St[-1] - K))
-
-def EP(St, K):
-    out = np.maximum(0, K - St[-1])
-    return(out)
-
-
 K = 1
-
 fDOBC = lambda x: DOBC(x, K, 30)
 fDIBC = lambda x: DIBC(x, K, 30)
 
@@ -153,10 +136,22 @@ fP = lambda x: EP(x, K)
 fC = lambda x: EC(x, K)
 fPC = lambda x: np.array([EP(x, K), EC(x, K)])
 
-# with open("HestonParams.txt", "w") as fp:
-#     for param in M.parameters:
-#         print(param)
-#         fp.write(str(param))
+H = 0.75
+K = 1
+M.s0 = 1
 
-M.s0 = s0
-M.priceMC(fPC, 3/12,n = 10, M = 100)
+fDIBP = lambda x: DIBP(x, K, H)
+E = []
+V = []
+for i in range(1000):
+    x, s = M.priceMC(fDIBP, .5, 400, M = 15000)
+    E.append(x)
+    V.append(s)
+
+plt.hist(E, bins = 20, density = True)
+mu = np.mean(E)
+sig = np.std(E)
+x = np.arange(mu - 4.0*sig,mu + 4.0*sig, 0.001)
+y = np.sqrt(1/(2*np.pi*sig**2))*np.exp(-1/2*(x - mu)**2/sig**2)
+plt.plot(x,y)
+plt.show()

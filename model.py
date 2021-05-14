@@ -419,11 +419,60 @@ class Model:
                 St[:,i] = St[:,i-1] + St[:,i-1] * (mu_dt + np.sqrt(sig2t[:,i-1]*dt)*e1[:,i-1]) + \
                     Jt[:,i-1]*dNt[:,i-1]
 
-                sig2t[i] = np.abs(kappa*(eta - sig2t[:,i-1])*dt + theta*np.sqrt(sig2t[:,i-1]*dt)*e2[:,i-1])
+                sig2t[:,i] = np.abs(kappa*(eta - sig2t[:,i-1])*dt + theta*np.sqrt(sig2t[:,i-1]*dt)*e2[:,i-1])
 
             val = np.array(list(map(optionFunc, St)))
             expectation = np.mean(val)
             sd = np.std(val)/np.sqrt(M)          
 
-
         return(np.exp(-r*maturity)*expectation, np.exp(-r*maturity)*sd)
+    def Delta(self, optionFunc, maturity, h = 0.0001, n = 1000, M = 10000):
+        if self.cf != hestfftcf:
+            return
+
+        dt = maturity/n
+        sig, kappa, eta, theta, rho = self.parameters
+        
+        r = self.r
+        mu_dt = 1 + r*dt
+        expectation = 0
+        sq_expectation = 0
+
+        St = np.zeros((M,n))
+        St_plush = np.zeros((M,n))
+        St_minush = np.zeros((M,n))
+
+        Vt = np.zeros((M,n))
+
+        St[:,0] = self.s0
+        St_plush[:,0] = self.s0 + h
+        St_minush[:,0] = self.s0 - h
+
+        Vt[:,0] = sig**2
+
+        e1 = np.random.randn(M,n)
+        Zstar = np.random.randn(M,n)
+        e2 = rho*e1 + np.sqrt(1-rho**2)*Zstar
+
+        for i in range(1,n):
+            St[:,i] = St[:,i-1]*(mu_dt + np.sqrt(Vt[:,i-1]*dt)*e1[:,i-1])
+            Vt[:,i] = np.abs(Vt[:,i-1] + (kappa*(eta - Vt[:,i-1]) - theta**2/4)*dt + \
+                theta*np.sqrt(Vt[:,i-1]*dt)*e2[:,i-1] + ((theta**2)*dt*e2[:,i-1]**2)/4)
+
+            St_plush[:,i] = St_plush[:,i-1]*(mu_dt + np.sqrt(Vt[:,i-1]*dt)*e1[:,i-1])
+            St_minush[:,i] = St_minush[:,i-1]*(mu_dt + np.sqrt(Vt[:,i-1]*dt)*e1[:,i-1])
+
+        val = np.array(list(map(optionFunc, St)))
+        val_plush = np.array(list(map(optionFunc, St_plush)))
+        val_minush = np.array(list(map(optionFunc, St_minush)))
+
+        expectation = np.mean(val)
+        sd = np.std(val)/np.sqrt(M)
+
+        expectation_plush = np.mean(val_plush)
+        sd_plush = np.std(val_plush)/np.sqrt(M)
+
+        expectation_minush = np.mean(val_minush)
+        sd_minush = np.std(val_minush)/np.sqrt(M)
+
+        return(expectation, sd, expectation_plush, sd_plush, expectation_minush, sd_minush)

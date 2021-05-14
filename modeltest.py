@@ -65,7 +65,6 @@ for day in dates:
     T.append(dt)
 
     dfCalls = dfCalls.append(tempdf)
-
 """
 
 # save data for may 6
@@ -92,6 +91,7 @@ if np.size(valid) > 0:
     Strikes = Strikes[valid]
     Times = Times[valid]
     Prices = Prices[valid]
+
 Weights = 1/Weights.reshape(-1,1)
 Weights = Weights/np.linalg.norm(Weights)
 
@@ -107,6 +107,7 @@ M.objective('RMSE')
 
 # heston model
 M.cf("hest")
+
 
 
 """
@@ -171,7 +172,7 @@ ndays = 36
 
 # Find the prices of down and in barrier put options given various maturities and
 # barrier values graphically
-
+"""
 Hs = np.arange(0.5, 0.95, .05)
 means = np.zeros((len(Hs), ndays))
 sds = np.zeros((len(Hs), ndays))
@@ -183,11 +184,11 @@ for j in range(0,len(Hs)):
         t = i*10/365
         # M is set too low here, increase value for a precise graph (reccomended
         # at 100000)
-        a,b = M.priceMC(fDIBP, t, n = ndays+i, M = 1000)
+        a,b = M.priceMC(fDIBP, t, n = ndays+i, M = 10000)
         means[j, i-1] = a
         sds[j, i-1] = b
 
-# Coce to make a plot of the above
+# Code to make a plot of the above
 times = [i/ndays for i in range(1,ndays+1)]
 fig, ax = plt.subplots()
 for i in range(0, len(Hs)):
@@ -198,7 +199,7 @@ ax.legend(bbox_to_anchor=(1, 1), loc="upper right")
 ax.set_xticks([round(t,1) for t in times])
 #ax.set_xticklabels([i*10 for i in range(1,ndays+1)])
 plt.show()
-
+"""
 H = 0.75
 K = 1
 
@@ -207,6 +208,7 @@ K = 1
 # mean value of several simulations, also very costly reduce M for noisier
 # approximation
 
+"""
 fDIBP = lambda x: DIBP(x, K, H)
 M.priceMC(fDIBC, .5, 180, M = 10000)
 E = []
@@ -232,7 +234,7 @@ Coupon = mu + (1 - np.exp(-r/2)) - margin
 npay = 6
 rate = Coupon / sum(1/npay*np.exp(-r*1/2/npay * k) for k in range(1,npay+1))
 
-
+"""
 # use finite difference method to find value of down and in barrier call delta
 # this is used for hedging.  
 h = 0.00001
@@ -263,8 +265,17 @@ plt.plot(stocks,delta_S/reps)
 M.s0 = s0
 K = s0
 
+
+
 # selected value of barrier for final product
 H = 0.75*s0
 h = .001
+fDIBP = lambda x: DIBP(x, K, H)
+M.s0 = s0 + h
+high, sdH = M.priceMC(fDIBP, 0.5, n = 1000, M = 20000)
+M.s0 = s0 - h
+low, sdL = M.priceMC(fDIBP, 0.5, n = 1000, M = 20000)
+
+
 fDelta = lambda x: (DIBP(x + h, K, H) - DIBP(x - h, K, H))/(2*h)
 delta, sdelta = M.priceMC(fDelta, 0.5, n = 1000, M = 10000)
